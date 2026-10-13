@@ -83,7 +83,8 @@ GET /api/v1/health
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "service": "kairo-api"
 }
 ```
 
@@ -571,3 +572,37 @@ GET /api/v1/agents/tasks/{id}
         ↓
 Return Result
 ```
+
+---
+
+# Implemented Backend Routes
+
+The current FastAPI application mounts routes under `/api/v1`. Swagger UI and
+ReDoc are available at `/api/docs` and `/api/redoc`.
+
+| Method | Path | Behavior |
+|---|---|---|
+| `GET` | `/api/v1/health` | Public process health check |
+| `GET` | `/api/v1/auth/me` | Return the identity from a validated Supabase bearer token |
+| `POST` | `/api/v1/projects` | Create an owned project |
+| `GET` | `/api/v1/projects` | List the authenticated user's projects |
+| `GET` | `/api/v1/projects/{project_id}` | Retrieve an owned project |
+| `PATCH` | `/api/v1/projects/{project_id}` | Update an owned project |
+| `DELETE` | `/api/v1/projects/{project_id}` | Delete an owned project |
+| `POST` | `/api/v1/repositories` | Connect a repository; returns `503` until OAuth and persistence are configured |
+| `GET` | `/api/v1/repositories` | List connected repositories; returns `503` until OAuth and persistence are configured |
+| `GET`, `DELETE` | `/api/v1/repositories/{owner}/{repository}` | Inspect or disconnect a repository; returns `503` until OAuth and persistence are configured |
+| `POST` | `/api/v1/agents/tasks` | Validate project ownership; return `503` until the agent service is configured |
+| `POST`, `GET` | `/api/v1/executions` | Return `503` until isolated execution infrastructure is configured |
+| `POST` | `/api/v1/webhooks/github` | Verify and safely acknowledge GitHub webhook events |
+
+Protected endpoints require `Authorization: Bearer <Supabase access token>`.
+Project ownership is taken from the validated token and applied to each
+database query; clients cannot choose an owner ID.
+
+Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` together to enable
+Supabase-backed authentication and project operations. Configure
+`GITHUB_WEBHOOK_SECRET` to enable webhook signature verification. GitHub OAuth
+token storage, agent orchestration, and isolated execution are not present yet;
+their endpoints return structured `503` errors instead of reporting fake
+successes or executing code in the API process.

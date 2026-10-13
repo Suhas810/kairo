@@ -315,3 +315,51 @@ For the initial Kairo version, prioritize:
 8. Output limits
 
 The security architecture can later be strengthened with dedicated execution workers and stronger container/runtime isolation.
+
+---
+
+# 17. Docker Runner Setup
+
+The standalone runner is in `sandbox/runner`. It accepts a Pydantic
+`ExecutionRequest` and returns an `ExecutionResult`; it has no FastAPI or
+database dependency. Install the runner's dependency and make the Docker CLI
+and daemon available to the trusted runner process.
+
+From the repository's `sandbox` directory, build the trusted language images:
+
+```sh
+docker build -f templates/python/Dockerfile -t kairo-sandbox-python:1 .
+docker build -f templates/javascript/Dockerfile -t kairo-sandbox-javascript:1 .
+docker build -f templates/typescript/Dockerfile -t kairo-sandbox-typescript:1 .
+```
+
+Install test dependencies with `python -m pip install -r requirements-dev.txt`
+and run the mocked unit suite from that directory with
+`python -m pytest tests/test_runner.py`. Optional Docker end-to-end tests can
+then be run with `python -m pytest -m integration tests/test_integration.py`.
+A Docker daemon is required only for end-to-end execution. Runtime image pulls
+are disabled: build these images before accepting executions. The TypeScript
+template installs only its pinned compiler during the trusted image build;
+submitted project dependencies are not installed.
+
+The trusted runner container can be built with `docker build -t
+kairo-sandbox-runner:1 .`. Connecting that orchestrator to a host Docker daemon
+requires privileged access to the Docker socket or another Docker API
+transport. Treat the runner as a trusted host-level service, isolate its
+deployment, and never pass the socket to an execution container. Each execution
+uses a fresh, non-root container with networking disabled, a read-only root
+filesystem, a writable temporary workspace, CPU/memory/process/time/output
+limits, and cleanup on return.
+
+Execution requests accept `language`, a mapping of relative `source_files`,
+`entrypoint`, and a bounded `timeout_seconds`; `test_command` can only select
+the language's predefined test command. The Python API is
+`from runner.execute import execute` and `from runner.test_runner import
+run_tests`. Both return structured results and never invoke a host shell.
+
+The FastAPI execution route still returns `503` until execution records and a
+backend service integration are configured. The sandbox does not persist
+execution metadata. Docker containers are not a production-grade boundary for
+arbitrary public workloads; use gVisor, Kata Containers, or a dedicated
+sandbox service, and enforce host temporary-storage quotas before public
+deployment.
