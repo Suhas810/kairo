@@ -1,140 +1,75 @@
-import { useMemo, useState, type FormEvent } from 'react'
-
-type ProjectFormState = {
-  name: string
-  description: string
-  defaultBranch: string
-  language: string
-  agentPreference: string
-}
-
-const initialForm: ProjectFormState = {
-  name: 'Kairo API',
-  description: 'AI-driven software engineering platform backend and orchestration services.',
-  defaultBranch: 'main',
-  language: 'TypeScript',
-  agentPreference: 'Autonomous with review checkpoints',
-}
+import { useState, type FormEvent } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useProject } from '../../hooks/useProject'
 
 export function ProjectSettings() {
-  const [form, setForm] = useState<ProjectFormState>(initialForm)
+  const { projectId } = useParams()
+  const { state, updateProject, deleteProject } = useProject(projectId)
+  const navigate = useNavigate()
+  const [name, setName] = useState(state.status === 'success' ? state.project.name : '')
+  const [description, setDescription] = useState(state.status === 'success' ? state.project.description : '')
+  const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
-  const validationErrors = useMemo(() => {
-    const errors: Partial<Record<keyof ProjectFormState, string>> = {}
-
-    if (form.name.trim().length < 3) {
-      errors.name = 'Project name must be at least 3 characters.'
-    }
-
-    if (form.description.trim().length < 10) {
-      errors.description = 'Please provide a fuller project description.'
-    }
-
-    if (form.defaultBranch.trim().length < 2) {
-      errors.defaultBranch = 'Default branch is required.'
-    }
-
-    return errors
-  }, [form])
-
-  const handleChange = (field: keyof ProjectFormState, value: string) => {
-    setForm((current) => ({ ...current, [field]: value }))
+  if (state.status !== 'success') {
+    return <p role="alert" className="rounded border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+      {state.status === 'error' ? state.message : 'Project is unavailable.'}
+    </p>
   }
+  const project = state.project
 
-  const handleSubmit = (event: FormEvent) => {
+  function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-
-    if (Object.keys(validationErrors).length > 0) {
-      setMessage('Please fix the validation issues before saving.')
+    setError('')
+    setMessage('')
+    if (name.trim().length < 3) {
+      setError('Project names must be at least 3 characters.')
       return
     }
-
-    setMessage('Changes saved locally for the demo project settings.')
+    const updated = updateProject(project.id, { name, description })
+    if (!updated) {
+      setError('This project is no longer available.')
+      return
+    }
+    setMessage('Project details updated for this browser session.')
   }
 
-  const handleDelete = () => {
-    if (window.confirm('This will only simulate a destructive action in the demo UI. No project data will be deleted.')) {
-      setMessage('Destructive action triggered in the UI demo only.')
+  function removeProject() {
+    if (!window.confirm(`Delete "${project.name}" from this browser session?`)) return
+    if (!deleteProject(project.id)) {
+      setError('This project is no longer available.')
+      return
     }
+    navigate('/projects', { replace: true })
   }
 
   return (
-    <section className="panel p-5">
-      <div className="mb-5">
-        <h3 className="text-lg font-semibold text-white">Project settings</h3>
-        <p className="text-sm text-zinc-400">Configure defaults for project execution and agent behavior.</p>
-      </div>
+    <div className="max-w-3xl space-y-6">
+      <header className="border-b border-zinc-800 pb-4">
+        <p className="text-xs text-zinc-500"><Link to={`/projects/${project.id}`} className="hover:text-zinc-300">{project.name}</Link> / Settings</p>
+        <h1 className="mt-1 text-xl font-semibold">Project settings</h1>
+        <p className="mt-1 text-sm text-zinc-400">Edit the project details available in this local demo.</p>
+      </header>
 
-      <form className="space-y-4" onSubmit={handleSubmit}>
+      <form onSubmit={save} className="space-y-4 rounded border border-zinc-800 bg-zinc-950 p-4">
         <div>
-          <label className="mb-1.5 block text-sm text-zinc-300">Project name</label>
-          <input
-            value={form.name}
-            onChange={(event) => handleChange('name', event.target.value)}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 focus:border-violet-500/60 focus:outline-none"
-          />
-          {validationErrors.name && <p className="mt-1 text-xs text-red-300">{validationErrors.name}</p>}
+          <label htmlFor="project-settings-name" className="mb-1.5 block text-sm text-zinc-300">Project name</label>
+          <input id="project-settings-name" value={name} onChange={(event) => setName(event.target.value)} required minLength={3} maxLength={80} className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-indigo-400" />
         </div>
-
         <div>
-          <label className="mb-1.5 block text-sm text-zinc-300">Description</label>
-          <textarea
-            value={form.description}
-            onChange={(event) => handleChange('description', event.target.value)}
-            rows={3}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 focus:border-violet-500/60 focus:outline-none"
-          />
-          {validationErrors.description && <p className="mt-1 text-xs text-red-300">{validationErrors.description}</p>}
+          <label htmlFor="project-settings-description" className="mb-1.5 block text-sm text-zinc-300">Description</label>
+          <textarea id="project-settings-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={4} maxLength={500} className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-indigo-400" />
         </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-1.5 block text-sm text-zinc-300">Default branch</label>
-            <input
-              value={form.defaultBranch}
-              onChange={(event) => handleChange('defaultBranch', event.target.value)}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 focus:border-violet-500/60 focus:outline-none"
-            />
-            {validationErrors.defaultBranch && <p className="mt-1 text-xs text-red-300">{validationErrors.defaultBranch}</p>}
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-sm text-zinc-300">Preferred language</label>
-            <select
-              value={form.language}
-              onChange={(event) => handleChange('language', event.target.value)}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 focus:border-violet-500/60 focus:outline-none"
-            >
-              <option>TypeScript</option>
-              <option>React</option>
-              <option>Node.js</option>
-              <option>Python</option>
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className="mb-1.5 block text-sm text-zinc-300">Agent preferences</label>
-          <input
-            value={form.agentPreference}
-            onChange={(event) => handleChange('agentPreference', event.target.value)}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 focus:border-violet-500/60 focus:outline-none"
-          />
-        </div>
-
-        {message && <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-sm text-violet-100">{message}</div>}
-
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-          <button type="submit" className="rounded-xl border border-violet-500 bg-violet-500 px-3.5 py-2.5 text-sm font-medium text-white transition hover:bg-violet-400">
-            Save changes
-          </button>
-
-          <button type="button" onClick={handleDelete} className="rounded-xl border border-red-500/50 bg-red-500/10 px-3.5 py-2.5 text-sm font-medium text-red-200 transition hover:bg-red-500/20">
-            Delete project
-          </button>
-        </div>
+        {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+        {message && <p role="status" className="text-sm text-emerald-300">{message}</p>}
+        <button type="submit" className="rounded bg-indigo-500 px-3.5 py-2 text-sm font-medium text-white hover:bg-indigo-400">Save project</button>
       </form>
-    </section>
+
+      <section className="rounded border border-red-500/30 bg-red-500/5 p-4">
+        <h2 className="text-sm font-semibold text-red-200">Delete project</h2>
+        <p className="mt-1 text-sm text-zinc-400">Remove this project from the current browser session. This does not affect a connected repository.</p>
+        <button type="button" onClick={removeProject} className="mt-4 rounded border border-red-500/50 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10">Delete project</button>
+      </section>
+    </div>
   )
 }

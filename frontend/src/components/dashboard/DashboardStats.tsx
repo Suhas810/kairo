@@ -1,35 +1,5 @@
 import { ArrowUpRight, BriefcaseBusiness, Bot, CheckCheck, Gauge } from 'lucide-react'
-
-const stats = [
-  {
-    label: 'Total Projects',
-    value: '24',
-    detail: '+3 this month',
-    icon: BriefcaseBusiness,
-    tone: 'violet',
-  },
-  {
-    label: 'Active Agents',
-    value: '8',
-    detail: '2 in testing',
-    icon: Bot,
-    tone: 'cyan',
-  },
-  {
-    label: 'Tasks Completed',
-    value: '186',
-    detail: '+26% vs last week',
-    icon: CheckCheck,
-    tone: 'emerald',
-  },
-  {
-    label: 'Success Rate',
-    value: '96.4%',
-    detail: '24/25 last cycle',
-    icon: Gauge,
-    tone: 'amber',
-  },
-]
+import { useProject } from '../../hooks/useProject'
 
 const toneClasses: Record<string, string> = {
   violet: 'border-violet-500/30 bg-violet-500/10 text-violet-200',
@@ -39,6 +9,13 @@ const toneClasses: Record<string, string> = {
 }
 
 export function DashboardStats() {
+  const { projects } = useProject()
+  const stats = [
+    { label: 'Projects', value: String(projects.length), detail: 'Available in this session', icon: BriefcaseBusiness, tone: 'violet' },
+    { label: 'Connected agent', value: 'Unavailable', detail: 'No model service configured', icon: Bot, tone: 'cyan' },
+    { label: 'Completed tasks', value: '—', detail: 'No task service configured', icon: CheckCheck, tone: 'emerald' },
+    { label: 'Execution success', value: '—', detail: 'No backend execution results', icon: Gauge, tone: 'amber' },
+  ]
   return (
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {stats.map(({ label, value, detail, icon: Icon, tone }) => (
@@ -47,10 +24,7 @@ export function DashboardStats() {
             <div className={`rounded-xl border p-2 ${toneClasses[tone]}`}>
               <Icon className="h-5 w-5" />
             </div>
-            <span className="flex items-center gap-1 text-xs font-medium text-emerald-300">
-              <ArrowUpRight className="h-3.5 w-3.5" />
-              Healthy
-            </span>
+            {label === 'Projects' && <span className="flex items-center gap-1 text-xs font-medium text-zinc-400"><ArrowUpRight className="h-3.5 w-3.5" />Local</span>}
           </div>
 
           <div className="mt-4">

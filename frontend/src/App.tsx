@@ -1,155 +1,91 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { ActivityFeed } from './components/dashboard/ActivityFeed'
-import { DashboardStats } from './components/dashboard/DashboardStats'
-import { ProjectCard } from './components/dashboard/ProjectCard'
-import { RecentTasks } from './components/dashboard/RecentTasks'
-import { AgentChat } from './components/agent/AgentChat'
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
+import { useAuth } from './hooks/useAuth'
+import { AgentProvider } from './providers/AgentProvider'
+import { AuthProvider } from './providers/AuthProvider'
+import { ProjectProvider } from './providers/ProjectProvider'
 import { PageLayout } from './components/layout/PageLayout'
-import { Header } from './components/layout/Header'
-import { ProjectHeader } from './components/project/ProjectHeader'
-import { ProjectOverview } from './components/project/ProjectOverview'
-import { RepositoryCard } from './components/project/RepositoryCard'
+import { LoadingSpinner } from './components/layout/LoadingSpinner'
+import { Agent } from './pages/Agent'
+import { Dashboard } from './pages/Dashboard'
+import { Execution } from './pages/Execution'
+import { Landing } from './pages/Landing'
+import { Login } from './pages/Login'
+import { Project } from './pages/Project'
+import { Projects } from './pages/Projects'
+import { Repository } from './pages/Repository'
+import { Repositories } from './pages/Repositories'
+import { Settings } from './pages/Settings'
+import { Signup } from './pages/Signup'
 import { ProjectSettings } from './components/project/ProjectSettings'
+import { useProject } from './hooks/useProject'
+import { ThemeProvider } from './providers/ThemeProvider'
 
-const mockProjects = [
-  {
-    name: 'Kairo API',
-    description: 'TypeScript backend for task orchestration, execution, and repository automation.',
-    status: 'Healthy',
-    repository: 'kairo/api',
-    language: 'TypeScript',
-    updatedAt: '12 minutes ago',
-    progress: 82,
-    accent: 'bg-violet-500',
-  },
-  {
-    name: 'Dashboard UI',
-    description: 'Responsive React frontend for the Kairo agent workspace and project dashboard.',
-    status: 'Reviewing',
-    repository: 'kairo/frontend',
-    language: 'React',
-    updatedAt: '1 hour ago',
-    progress: 64,
-    accent: 'bg-cyan-500',
-  },
-  {
-    name: 'Auth Service',
-    description: 'Node.js service handling sign-in, token issuance, and enterprise identity flows.',
-    status: 'On track',
-    repository: 'identity/auth',
-    language: 'Node.js',
-    updatedAt: 'Today',
-    progress: 91,
-    accent: 'bg-emerald-500',
-  },
-]
-
-function DashboardPage() {
-  return (
-    <PageLayout>
-      <Header
-        title="Dashboard"
-        subtitle="Monitor active projects, execution health, and AI agent progress."
-        actionButtons={[
-          { label: 'New project', variant: 'primary' },
-          { label: 'View backlog', variant: 'secondary' },
-        ]}
-      />
-
-      <div className="space-y-8">
-        <DashboardStats />
-
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-white">Projects</h2>
-            <button className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 transition hover:border-violet-500 hover:text-white">
-              Manage all
-            </button>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-3">
-            {mockProjects.map((project) => (
-              <ProjectCard key={project.name} {...project} />
-            ))}
-          </div>
-        </section>
-
-        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <RecentTasks />
-          <ActivityFeed />
-        </div>
-      </div>
-    </PageLayout>
-  )
+function RequireAuth() {
+  const { status } = useAuth()
+  const location = useLocation()
+  if (status === 'loading') return <LoadingSpinner label="Restoring your session" />
+  if (status !== 'authenticated') return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />
+  return <Outlet />
 }
 
-function ProjectPage() {
-  return (
-    <PageLayout>
-      <Header
-        title="Kairo API"
-        subtitle="AI coding platform backend and orchestration layer."
-        breadcrumb={['Projects', 'Kairo API']}
-        status={{ label: 'Healthy', tone: 'success' }}
-        actionButtons={[
-          { label: 'Open repository', variant: 'secondary' },
-          { label: 'Run agent', variant: 'primary' },
-        ]}
-      />
-
-      <div className="space-y-6">
-        <ProjectHeader
-          projectName="Kairo API"
-          description="Backend services for orchestration, project execution, and agent task management across repositories and code environments."
-          status="Healthy"
-          repository="github.com/kairo/kairo-api"
-          branch="main"
-        />
-
-        <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-          <ProjectOverview />
-          <div className="space-y-6">
-            <RepositoryCard
-              name="kairo-api"
-              provider="GitHub"
-              defaultBranch="main"
-              disconnected={false}
-              latestCommit="7a4f20c"
-              lastCommitMessage="Add task telemetry and execution summaries"
-              repositoryUrl="https://github.com/kairo/kairo-api"
-            />
-            <ProjectSettings />
-          </div>
-        </div>
-      </div>
-    </PageLayout>
-  )
+function LoginRoute() {
+  const { status } = useAuth()
+  if (status === 'loading') return <LoadingSpinner label="Checking your session" />
+  return status === 'authenticated' ? <Navigate to="/dashboard" replace /> : <Login />
 }
 
-function AgentPage() {
-  return (
-    <PageLayout>
-      <Header
-        title="Agent workspace"
-        subtitle="Debugging failing test run and reviewing repository context."
-        breadcrumb={['Agents', 'Code repair agent']}
-        status={{ label: 'Debugging', tone: 'warning' }}
-      />
+function NewAgentRoute() {
+  const { projects } = useProject()
+  const project = projects[0]
+  return project ? <Navigate to={`/projects/${project.id}/agent`} replace /> : <Navigate to="/projects" replace />
+}
 
-      <AgentChat />
-    </PageLayout>
+function NotFound() {
+  return <main className="grid min-h-screen place-items-center bg-[#0b0d10] px-4 text-center text-zinc-100"><div><p className="font-mono text-xs text-zinc-500">404</p><h1 className="mt-2 text-2xl font-semibold">Page not found</h1><p className="mt-2 text-sm text-zinc-400">That route is not part of this workspace.</p><Link to="/" className="mt-5 inline-block rounded border border-zinc-700 px-3 py-2 text-sm hover:border-zinc-500">Return to Kairo</Link></div></main>
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/login" element={<LoginRoute />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route element={<RequireAuth />}>
+        <Route element={<PageLayout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/repositories" element={<Repositories />} />
+          <Route path="/projects/:projectId" element={<Project />} />
+          <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
+          <Route path="/projects/:projectId/repository" element={<Repository />} />
+          <Route path="/projects/:projectId/agent" element={<Agent />} />
+          <Route path="/projects/:projectId/execution" element={<Execution />} />
+          <Route path="/agent/new" element={<NewAgentRoute />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings/profile" element={<Settings />} />
+          <Route path="/settings/preferences" element={<Settings />} />
+          <Route path="/settings/appearance" element={<Settings />} />
+          <Route path="/settings/security" element={<Settings />} />
+          <Route path="/settings/notifications" element={<Settings />} />
+        </Route>
+      </Route>
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   )
 }
 
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/projects" element={<ProjectPage />} />
-        <Route path="/agent" element={<AgentPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <AuthProvider>
+        <ThemeProvider>
+          <ProjectProvider>
+            <AgentProvider>
+              <AppRoutes />
+            </AgentProvider>
+          </ProjectProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </BrowserRouter>
   )
 }
