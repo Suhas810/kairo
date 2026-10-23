@@ -1,0 +1,13 @@
+{
+  "name": "kairo-sandbox-typescript",
+  "private": true,
+  "version": "1.0.0",
+  "devDependencies": {
+    "@types/node": "22.13.10",
+    "typescript": "5.7.3"
+  },
+  "scripts": {
+    "start": "node /opt/kairo/typescript_runner.mjs run src/index.ts",
+    "test": "node /opt/kairo/typescript_runner.mjs test"
+  }
+}
