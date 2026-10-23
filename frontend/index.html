@@ -2,12 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="Kairo is an AI-powered agent workspace for planning, research, coding, testing, and debugging."
-    />
-    <title>Kairo | AI-Powered Agent Workspace</title>
+    <meta name="theme-color" content="#0b0d10" />
+    <meta name="description" content="Kairo developer workspace demo" />
+    <script>
+      try {
+        const preference = localStorage.getItem('kairo-theme-preference')
+        const theme = preference === 'light' || preference === 'dark'
+          ? preference
+          : preference === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches
+            ? 'light'
+            : 'dark'
+        document.documentElement.dataset.theme = theme
+        document.documentElement.style.colorScheme = theme
+      } catch (error) {
+        console.error('Could not read the saved theme preference; using dark mode.', error)
+        document.documentElement.dataset.theme = 'dark'
+        document.documentElement.style.colorScheme = 'dark'
+      }
+    </script>
+    <title>Kairo — Developer Workspace</title>
   </head>
   <body>
     <div id="root"></div>

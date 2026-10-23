@@ -3,17 +3,22 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
-      boxShadow: {
-        glow: '0 0 0 1px rgba(139, 92, 246, 0.2), 0 20px 60px rgba(96, 165, 250, 0.12)',
-      },
       colors: {
-        ink: '#08090D',
-        panel: '#11131B',
-        accent: '#8B5CF6',
-        accentSoft: '#60A5FA',
-        border: '#272936',
+        background: '#09090B',
+        panel: '#121216',
+        elevated: '#18181F',
+        border: '#27272F',
+        primary: '#8B5CF6',
+        secondary: '#6366F1',
+        success: '#22C55E',
+        warning: '#F59E0B',
+        error: '#EF4444',
+      },
+      boxShadow: {
+        soft: '0 10px 25px rgba(15, 23, 42, 0.35)',
       },
     },
   },
   plugins: [],
-};
+}
+
