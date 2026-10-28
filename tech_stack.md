@@ -524,7 +524,7 @@ Nebius is therefore part of the actual production runtime.
 
    ┌─────────────┐
    │  LangSmith  │
-   │ Observability│
+   │Observability│
    └─────────────┘
 ```
 
@@ -731,7 +731,7 @@ LangSmith → Observability
 │ Execution       Docker                  │
 │ Observability   LangSmith               │
 ├─────────────────────────────────────────┤
-│ Version Control Git + GitHub             │
+│ Version Control Git + GitHub            │
 └─────────────────────────────────────────┘
 ```
 

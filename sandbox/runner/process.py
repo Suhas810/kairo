@@ -11,9 +11,13 @@ from pathlib import Path
 from typing import Sequence
 from uuid import UUID, uuid4
 
+from runner.environment import (
+    PolicyConfigurationError,
+    load_resource_limits,
+    load_security_policy,
+)
 from runner.output import ExecutionStatus, bounded_text
 
-MAX_OUTPUT_BYTES = 64_000
 KILL_TIMEOUT_SECONDS = 5
 POLL_INTERVAL_SECONDS = 0.02
 @dataclass(frozen=True)
@@ -75,9 +79,7 @@ def _docker_command(
 ) -> list[str]:
     """Build only fixed Docker options and a trusted, predefined image name."""
     if image not in {
-        "kairo-sandbox-python:1",
-        "kairo-sandbox-javascript:1",
-        "kairo-sandbox-typescript:1",
+        *load_security_policy().images.values(),
     }:
         raise ValueError("The requested execution image is not supported.")
     if not command or any(
@@ -94,40 +96,56 @@ def _docker_command(
     if container_name != _container_identity(container_name.removeprefix("kairo-exec-")):
         raise ValueError("The execution container name is invalid.")
 
+    security = load_security_policy()
+    limits = load_resource_limits()
     uid = os.getuid() if hasattr(os, "getuid") else 10001
     gid = os.getgid() if hasattr(os, "getgid") else 10001
-    if uid == 0:
+    if uid == 0 or not security.run_as_non_root:
         uid = gid = 10001
     docker_args = [
         "docker",
         "run",
-        "--rm",
         "--init",
-        "--pull=never",
         "--name",
         container_name,
     ]
+    if security.remove_after_execution:
+        docker_args.append("--rm")
+    if not security.automatic_image_pull:
+        docker_args.append("--pull=never")
     if cid_file is not None:
         docker_args.extend(["--cidfile", str(cid_file)])
-    docker_args.extend([
-        "--network=none",
-        "--read-only",
-        "--tmpfs",
-        "/tmp:rw,noexec,nosuid,size=64m",
-        "--cap-drop=ALL",
-        "--security-opt=no-new-privileges:true",
-        "--pids-limit=64",
-        "--memory=256m",
-        "--memory-swap=256m",
-        "--cpus=1",
-        "--ulimit=nofile=64:64",
-        "--user",
-        f"{uid}:{gid}",
-        "--mount",
-        f"type=bind,source={workspace.resolve()},target=/workspace,rw",
-        image,
-        *command,
-    ])
+    docker_args.append(f"--network={security.network_mode}")
+    if security.read_only_root_filesystem:
+        docker_args.append("--read-only")
+    tmpfs_flags = ["rw", "nosuid", "nodev"]
+    if security.temporary_noexec:
+        tmpfs_flags.append("noexec")
+    tmpfs_flags.append(f"size={limits.temporary_storage_bytes // 1_048_576}m")
+    docker_args.extend(
+        [
+            "--tmpfs",
+            f"{security.temporary_path}:{','.join(tmpfs_flags)}",
+            *[
+                f"--cap-drop={capability}"
+                for capability in security.drop_capabilities
+            ],
+            "--security-opt=no-new-privileges:true",
+            f"--pids-limit={limits.pid_limit}",
+            f"--memory={limits.memory_bytes // 1_048_576}m",
+            f"--memory-swap={limits.memory_bytes // 1_048_576}m",
+            f"--cpus={limits.cpu_count:g}",
+            "--ulimit=nofile=64:64",
+            "--user",
+            f"{uid}:{gid}",
+            "--mount",
+            f"type=bind,source={workspace.resolve()},target=/workspace,readonly"
+            if security.workspace_read_only
+            else f"type=bind,source={workspace.resolve()},target=/workspace,rw",
+            image,
+            *command,
+        ]
+    )
     return docker_args
 
 
@@ -152,12 +170,25 @@ def run_container(
     workspace: Path,
     timeout_seconds: int,
     execution_id: UUID | str,
-    output_limit: int = MAX_OUTPUT_BYTES,
+    output_limit: int | None = None,
 ) -> ProcessResult:
     """Run fixed Docker images without a shell, cap output, and enforce a deadline."""
-    if not 1 <= timeout_seconds <= 120:
+    try:
+        limits = load_resource_limits()
+        load_security_policy()
+    except PolicyConfigurationError:
+        return ProcessResult(
+            status="infrastructure_error",
+            exit_code=None,
+            stdout="",
+            stderr="",
+            duration_ms=0,
+            error="The sandbox security or resource policy is unavailable.",
+        )
+    output_limit = limits.max_output_bytes if output_limit is None else output_limit
+    if not 1 <= timeout_seconds <= limits.max_timeout_seconds:
         raise ValueError("The execution timeout is outside the allowed range.")
-    if not 1 <= output_limit <= MAX_OUTPUT_BYTES:
+    if not 1 <= output_limit <= limits.max_output_bytes:
         raise ValueError("The execution output limit is outside the allowed range.")
     container_name = _container_identity(execution_id)
     docker = shutil.which("docker")

@@ -348,12 +348,18 @@ requires privileged access to the Docker socket or another Docker API
 transport. Treat the runner as a trusted host-level service, isolate its
 deployment, and never pass the socket to an execution container. Each execution
 uses a fresh, non-root container with networking disabled, a read-only root
-filesystem, a writable temporary workspace, CPU/memory/process/time/output
-limits, and cleanup on return.
+filesystem, a read-only source workspace, and a bounded writable `/tmp` tmpfs.
+The validated policies in `sandbox/policies` enforce a 30-second default and
+120-second maximum timeout, one CPU, 256 MiB memory, 64 processes, 64,000 bytes
+of combined output, at most 100 source files, 1 MB per file, 4 MB total source,
+and a 64 MiB temporary filesystem. Invalid or weakened security policy values
+fail closed instead of starting a container.
 
 Execution requests accept `language`, a mapping of relative `source_files`,
 `entrypoint`, and a bounded `timeout_seconds`; `test_command` can only select
-the language's predefined test command. The Python API is
+the language's predefined test command. JavaScript and TypeScript package test
+scripts are accepted only when they match the fixed runner invocations; project
+dependencies are never installed at runtime. The Python API is
 `from runner.execute import execute` and `from runner.test_runner import
 run_tests`. Both return structured results and never invoke a host shell.
 

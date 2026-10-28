@@ -200,6 +200,8 @@ Production Deployment
 Smoke Testing
 ```
 
+The repository's `scripts/deploy.sh` supports the linked Vercel frontend only. It requires Vercel CLI authentication and `frontend/.vercel/project.json`, runs tests and the production build first, and requires typing `DEPLOY` for production. Backend deployment and production secrets must be configured separately in Nebius; this repository currently has no Nebius deployment CLI or project configuration, so the script will not claim or perform a backend deployment.
+
 ---
 
 ## Production Smoke Tests

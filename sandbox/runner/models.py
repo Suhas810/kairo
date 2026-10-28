@@ -14,6 +14,12 @@ _ALLOWED_TEST_COMMANDS = {
 }
 
 
+def _default_timeout_seconds() -> int:
+    from runner.environment import load_resource_limits
+
+    return load_resource_limits().default_timeout_seconds
+
+
 def _validate_relative_path(value: str) -> str:
     """Reject absolute paths, traversal attempts, and platform-specific paths."""
     if (
@@ -44,7 +50,9 @@ class ExecutionRequest(BaseModel):
     language: Language
     source_files: dict[str, str] = Field(min_length=1, max_length=100)
     entrypoint: str = Field(min_length=1, max_length=240)
-    timeout_seconds: int = Field(default=30, ge=1, le=120)
+    timeout_seconds: int = Field(
+        default_factory=_default_timeout_seconds, ge=1, le=120, strict=True
+    )
     test_command: str | None = Field(default=None, max_length=64)
 
     @field_validator("source_files")

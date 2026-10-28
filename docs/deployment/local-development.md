@@ -1,329 +1,72 @@
 # Local Development
 
-## Overview
-
-This document explains how to run **Kairo** locally for development, testing, and debugging.
-
-Kairo is developed as a full-stack application with:
-
-- **Frontend:** React + TypeScript + Vite
-- **Backend:** Python + FastAPI
-- **Database:** Supabase
-- **AI:** Nebius AI
-- **Search:** Tavily
-- **Containerization:** Docker
-- **Version Control:** Git + GitHub
-
----
-
 ## Prerequisites
 
-Install the following before starting development:
-
-- Node.js 20+
-- npm
-- Python 3.11+
 - Git
-- Docker
-- Docker Compose
-- A Supabase account
-- A Nebius account/API key
-- A Tavily API key
+- Node.js 20 or newer and npm
+- Python 3.11 or newer
+- Docker (optional; required for sandbox container execution and optional Docker integration tests)
 
-Verify installations:
+Supabase, Nebius, and other external service credentials are not required for the current deterministic local tests.
 
-```bash
-node --version
-npm --version
-python --version
-git --version
-docker --version
-```
+## Setup
 
----
-
-## Repository Setup
-
-Clone the repository:
+From the repository root, run:
 
 ```bash
-git clone https://github.com/<username>/kairo.git
-cd kairo
+bash scripts/setup.sh
 ```
 
-Create the required environment files from the provided examples:
-
-```bash
-cp .env.example .env
-```
-
-Do not commit `.env` files containing secrets.
-
----
-
-## Frontend Setup
-
-Navigate to the frontend:
-
-```bash
-cd frontend
-```
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Start the Vite development server:
-
-```bash
-npm run dev
-```
-
-The frontend will normally be available at:
-
-```text
-http://localhost:5173
-```
-
----
-
-## Backend Setup
-
-Navigate to the backend:
-
-```bash
-cd backend
-```
-
-Create a Python virtual environment:
-
-```bash
-python -m venv .venv
-```
-
-Activate it on Windows:
+On Windows PowerShell:
 
 ```powershell
-.venv\Scripts\activate
+.\scripts\setup.ps1
 ```
 
-Activate it on Linux/macOS:
+Setup creates or reuses `backend/.venv` and `sandbox/.venv`, installs dependencies from the existing requirements files, and installs frontend dependencies using `npm ci` when a lockfile is present (otherwise `npm install`). It does not create or overwrite environment files.
+
+The backend currently reads `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `GITHUB_WEBHOOK_SECRET` from its process environment. Supabase settings are optional but must be set together. The app does not load `.env` files, and this repository currently has no `.env.example`; set any needed variables in the environment used to launch the application. Keep backend secrets out of frontend configuration.
+
+## Run the application
+
+Start both development services from the repository root:
 
 ```bash
-source .venv/bin/activate
+bash scripts/dev.sh
 ```
 
-Install dependencies:
+On Windows PowerShell:
+
+```powershell
+.\scripts\dev.ps1
+```
+
+The services bind to loopback only. The scripts report these configured local endpoints after startup:
+
+- Frontend: `http://127.0.0.1:5173`
+- Backend: `http://127.0.0.1:8000`
+- API docs: `http://127.0.0.1:8000/api/docs`
+
+Press Ctrl+C to stop both services. This repository does not currently define a Docker Compose development stack.
+
+## Tests and build
 
 ```bash
-pip install -r requirements.txt
+bash scripts/test.sh                 # backend, sandbox unit tests, and frontend build/type check
+bash scripts/test.sh backend         # backend unit and deterministic integration-boundary tests
+bash scripts/test.sh sandbox         # sandbox unit tests
+bash scripts/test.sh integration     # also run Docker sandbox integration tests
+bash scripts/build.sh                # frontend production build and Python syntax checks
 ```
 
-Start FastAPI:
+The Docker sandbox integration tests skip individual cases when Docker, its daemon, or the prebuilt sandbox images are unavailable. They do not invoke live AI services. There are no configured frontend unit-test or lint commands at present. To build the existing Dockerfiles explicitly, set `KAIRO_BUILD_CONTAINERS=1` when running `scripts/build.sh`.
 
-```bash
-uvicorn app.main:app --reload
-```
+The test script is Bash and should be run with Bash on Windows (for example, in Git Bash or WSL); setup and development also have native PowerShell scripts.
 
-The backend will normally run at:
+## Deployment
 
-```text
-http://localhost:8000
-```
+`bash scripts/deploy.sh preview` and `bash scripts/deploy.sh production` deploy the frontend to an already linked Vercel project. The production command requires typing `DEPLOY`. The backend is documented as hosted on Nebius AI Cloud, but this repository does not yet define a backend deployment CLI or project configuration; deploy and configure it separately. See [Vercel](vercel.md), [Nebius](nebius.md), and [Production](production.md).
 
-API documentation:
+## Safe cleanup
 
-```text
-http://localhost:8000/docs
-```
-
----
-
-## Environment Variables
-
-The backend should contain environment variables for external services.
-
-Example:
-
-```env
-NEBIUS_API_KEY=
-TAVILY_API_KEY=
-
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-
-FRONTEND_URL=http://localhost:5173
-```
-
-Frontend variables should use the Vite prefix:
-
-```env
-VITE_API_URL=http://localhost:8000
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-```
-
-Never expose private backend secrets through frontend environment variables.
-
----
-
-## Running the Complete Application
-
-Open two terminals.
-
-### Terminal 1 — Backend
-
-```bash
-cd backend
-source .venv/bin/activate
-uvicorn app.main:app --reload
-```
-
-### Terminal 2 — Frontend
-
-```bash
-cd frontend
-npm run dev
-```
-
-Then open:
-
-```text
-http://localhost:5173
-```
-
----
-
-## Docker Development
-
-Kairo can also be run using Docker.
-
-Build the containers:
-
-```bash
-docker compose build
-```
-
-Start the application:
-
-```bash
-docker compose up
-```
-
-Run in detached mode:
-
-```bash
-docker compose up -d
-```
-
-Stop the containers:
-
-```bash
-docker compose down
-```
-
-View logs:
-
-```bash
-docker compose logs -f
-```
-
----
-
-## Local Development Workflow
-
-Recommended workflow:
-
-```text
-Create Feature
-      ↓
-Create Git Branch
-      ↓
-Develop Locally
-      ↓
-Run Backend Tests
-      ↓
-Run Frontend Tests
-      ↓
-Test Agent Workflow
-      ↓
-Test API Integration
-      ↓
-Commit Changes
-      ↓
-Push to GitHub
-      ↓
-Create Pull Request
-```
-
----
-
-## Git Branching
-
-Use feature branches:
-
-```bash
-git checkout -b feature/<feature-name>
-```
-
-Example:
-
-```bash
-git checkout -b feature/agent-planner
-```
-
-Commit changes:
-
-```bash
-git add .
-git commit -m "Add agent planning workflow"
-```
-
-Push:
-
-```bash
-git push origin feature/agent-planner
-```
-
----
-
-## Local Testing Checklist
-
-Before pushing changes:
-
-- [ ] Frontend starts successfully
-- [ ] Backend starts successfully
-- [ ] Supabase connection works
-- [ ] Nebius API works
-- [ ] Tavily search works
-- [ ] Agent workflow executes correctly
-- [ ] API errors are handled
-- [ ] Frontend API requests work
-- [ ] No secrets are committed
-- [ ] Docker build succeeds
-- [ ] Tests pass
-
----
-
-## Important Rules
-
-Never commit:
-
-```text
-.env
-.env.local
-API keys
-service-role keys
-private credentials
-```
-
-Use:
-
-```text
-.env.example
-```
-
-to document required environment variables without exposing their values.
+`bash scripts/cleanup.sh` lists project-generated caches/build outputs in dry-run mode. To remove only the listed artifacts, run `bash scripts/cleanup.sh --apply` and type `CLEANUP`. The script does not remove environment files, virtual environments, source code, Git data, or persistent data.

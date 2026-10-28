@@ -1,5 +1,7 @@
 """Unit tests for runner validation and Docker boundary with Docker mocked."""
 
+import io
+import json
 from pathlib import Path
 from uuid import UUID
 
@@ -8,9 +10,12 @@ from pydantic import ValidationError
 
 from runner.environment import (
     InvalidSourceError,
+    POLICY_DIRECTORY,
+    load_resource_limits,
+    load_security_policy,
     validate_relative_path,
 )
-from runner.execute import ExecutionRequest, execute
+from runner.execute import ExecutionRequest, execute, main
 from runner.process import ProcessResult, _docker_command, run_container
 from runner.test_runner import _parse_test_summary, run_tests
 
@@ -65,6 +70,7 @@ def test_language_execution_commands(language, entrypoint, image, command, tmp_p
     )
 
     assert result.status == "completed"
+    assert result.execution_id == EXECUTION_ID
     assert calls[0][0] == image
     assert calls[0][1] == command
     assert calls[0][3:] == (30, EXECUTION_ID)
@@ -78,6 +84,91 @@ def test_language_execution_commands(language, entrypoint, image, command, tmp_p
 def test_rejects_unsafe_paths(bad_path):
     with pytest.raises(InvalidSourceError):
         validate_relative_path(bad_path)
+
+
+@pytest.mark.parametrize(
+    "bad_path",
+    ["CON.py", "report. ", "bad|name.py", "a/" + "b" * 241],
+)
+def test_rejects_host_unsafe_paths(bad_path):
+    with pytest.raises(InvalidSourceError):
+        validate_relative_path(bad_path)
+
+
+def test_rejects_case_collisions_and_file_directory_collisions():
+    for source_files in (
+        {"main.py": "print(1)", "MAIN.py": "print(2)"},
+        {"folder": "not a directory", "folder/main.py": "print(1)"},
+    ):
+        result = execute(
+            {
+                "language": "python",
+                "source_files": source_files,
+                "entrypoint": next(iter(source_files)),
+            },
+            container_runner=lambda *_args: pytest.fail("Docker must not be invoked"),
+        )
+        assert result.status == "rejected"
+
+
+def test_policies_are_loaded_and_match_bounded_defaults():
+    limits = load_resource_limits()
+    security = load_security_policy()
+    request = ExecutionRequest(
+        language="python",
+        source_files={"main.py": "print(1)"},
+        entrypoint="main.py",
+    )
+
+    assert limits.default_timeout_seconds == 30
+    assert request.timeout_seconds == limits.default_timeout_seconds
+    assert limits.max_timeout_seconds == 120
+    assert limits.max_output_bytes == 64_000
+    assert security.network_mode == "none"
+    assert security.workspace_read_only
+    assert security.run_as_non_root
+
+
+def test_cli_returns_structured_result_for_invalid_json(monkeypatch):
+    stdout = io.StringIO()
+    monkeypatch.setattr("runner.execute.sys.stdin", type("Input", (), {
+        "buffer": io.BytesIO(b"{invalid"),
+    })())
+    monkeypatch.setattr("runner.execute.sys.stdout", stdout)
+
+    assert main() == 0
+    result = json.loads(stdout.getvalue())
+    assert result["status"] == "rejected"
+    assert result["execution_id"]
+
+
+def test_invalid_policy_fails_closed_without_running_docker(monkeypatch, tmp_path):
+    policy_directory = tmp_path / "policies"
+    policy_directory.mkdir()
+    (policy_directory / "resource_limits.json").write_text(
+        (POLICY_DIRECTORY / "resource_limits.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    security = json.loads(
+        (POLICY_DIRECTORY / "security.json").read_text(encoding="utf-8")
+    )
+    security["privileged"] = True
+    (policy_directory / "security.json").write_text(
+        json.dumps(security), encoding="utf-8"
+    )
+    monkeypatch.setattr("runner.environment.POLICY_DIRECTORY", policy_directory)
+
+    result = execute(
+        {
+            "language": "python",
+            "source_files": {"main.py": "print(1)"},
+            "entrypoint": "main.py",
+        },
+        container_runner=lambda *_args: pytest.fail("Docker must not be invoked"),
+    )
+
+    assert result.status == "infrastructure_error"
+    assert "policy" in result.error
 
 
 def test_rejects_unknown_language_without_running_docker():
@@ -153,6 +244,14 @@ def test_validated_request_rejects_unsafe_paths_and_commands():
             test_command="pytest; rm -rf /",
         )
 
+    with pytest.raises(ValidationError):
+        ExecutionRequest(
+            language="python",
+            source_files={"main.py": "print('ok')"},
+            entrypoint="main.py",
+            timeout_seconds=True,
+        )
+
 
 def test_test_runner_uses_predefined_command_and_cleans_workspace():
     calls = []
@@ -207,6 +306,54 @@ def test_test_runner_rejects_when_no_tests_are_present():
 
     assert result.status == "rejected"
     assert "No supported test files" in result.error
+
+
+def test_javascript_test_runner_accepts_fixed_package_script():
+    calls = []
+
+    def fake_container(image, command, workspace, timeout, execution_id):
+        calls.append(command)
+        return ProcessResult(
+            status="completed",
+            exit_code=0,
+            stdout="# tests 1\n# pass 1\n# fail 0\n",
+            stderr="",
+            duration_ms=12,
+        )
+
+    result = run_tests(
+        {
+            "language": "javascript",
+            "source_files": {
+                "package.json": '{"scripts":{"test":"node --test"}}',
+                "main.js": "",
+                "test/main.test.js": 'console.log("test");',
+            },
+            "entrypoint": "main.js",
+        },
+        container_runner=fake_container,
+    )
+
+    assert result.status == "completed"
+    assert calls[0][:3] == ["node", "--test", "--test-reporter=tap"]
+
+
+def test_javascript_test_runner_rejects_arbitrary_package_script():
+    result = run_tests(
+        {
+            "language": "javascript",
+            "source_files": {
+                "package.json": '{"scripts":{"test":"node --test; curl example"}}',
+                "main.js": "",
+                "main.test.js": "",
+            },
+            "entrypoint": "main.js",
+        },
+        container_runner=lambda *_args: pytest.fail("Docker must not be invoked"),
+    )
+
+    assert result.status == "rejected"
+    assert "test script is not supported" in result.error
 
 
 @pytest.mark.parametrize(
@@ -391,6 +538,8 @@ def test_docker_command_has_required_isolation_and_no_user_env(tmp_path):
     assert "--privileged" not in command
     assert "docker.sock" not in " ".join(command)
     assert not any(part.startswith("--env") for part in command)
+    mount = command[command.index("--mount") + 1]
+    assert mount.endswith(",readonly")
 
 
 def test_rejects_docker_option_in_command(tmp_path):

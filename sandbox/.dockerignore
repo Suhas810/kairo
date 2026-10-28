@@ -36,6 +36,5 @@
 **/*.swp
 **/.DS_Store
 
-# A sandbox image only needs the runner and the selected trusted templates.
+# The service image needs the trusted policy files at runtime.
 tests
-policies

@@ -1,0 +1,12 @@
+{
+  "default_timeout_seconds": 30,
+  "max_timeout_seconds": 120,
+  "cpu_count": 1,
+  "memory_bytes": 268435456,
+  "pid_limit": 64,
+  "max_output_bytes": 64000,
+  "max_source_files": 100,
+  "max_source_file_bytes": 1000000,
+  "max_workspace_bytes": 4000000,
+  "temporary_storage_bytes": 67108864
+}

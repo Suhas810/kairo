@@ -20,6 +20,7 @@ class ExecutionResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    execution_id: str | None = None
     status: ExecutionStatus
     language: Language | None = None
     exit_code: int | None = None

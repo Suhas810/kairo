@@ -108,6 +108,15 @@ These belong on the backend.
 
 After connecting the GitHub repository to Vercel, deployments can be triggered automatically from the configured branch.
 
+For a manual CLI deployment, first link `frontend/` to the intended Vercel project using `vercel link`, then run one of the following from the repository root:
+
+```bash
+bash scripts/deploy.sh preview
+bash scripts/deploy.sh production
+```
+
+Production requires the exact confirmation `DEPLOY`. The script validates tests and the production build before deploying. It deploys only the frontend and does not deploy or configure the FastAPI service.
+
 Typical workflow:
 
 ```text

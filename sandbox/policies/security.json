@@ -1,0 +1,21 @@
+{
+  "privileged": false,
+  "host_network": false,
+  "network_mode": "none",
+  "run_as_non_root": true,
+  "read_only_root_filesystem": true,
+  "workspace_read_only": true,
+  "temporary_path": "/tmp",
+  "temporary_noexec": true,
+  "drop_capabilities": ["ALL"],
+  "no_new_privileges": true,
+  "approved_images": {
+    "python": "kairo-sandbox-python:1",
+    "javascript": "kairo-sandbox-javascript:1",
+    "typescript": "kairo-sandbox-typescript:1"
+  },
+  "environment_allowlist": [],
+  "devices": [],
+  "automatic_image_pull": false,
+  "remove_after_execution": true
+}

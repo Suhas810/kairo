@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from runner.environment import (
     InvalidSourceError,
+    PolicyConfigurationError,
     get_language_environment,
     prepare_workspace,
     validate_request_files,
@@ -35,9 +36,11 @@ def _docker_command(request: ExecutionRequest) -> list[str]:
 def _result(
     process_result: ProcessResult,
     language: Language,
+    execution_id: str,
 ) -> ExecutionResult:
     """Map internal process outcomes onto the public result schema."""
     return ExecutionResult(
+        execution_id=execution_id,
         status=process_result.status,
         language=language,
         exit_code=process_result.exit_code,
@@ -63,6 +66,7 @@ def execute(
     workspace and no application environment variables.
     """
     started = time.monotonic()
+    identifier = execution_id or str(uuid4())
     try:
         parsed = (
             request
@@ -74,13 +78,23 @@ def execute(
         temporary = prepare_workspace(parsed)
     except InvalidSourceError as exc:
         return ExecutionResult(
+            execution_id=identifier,
             status="rejected",
             language=request.language if isinstance(request, ExecutionRequest) else None,
             duration_ms=round((time.monotonic() - started) * 1000),
             error=str(exc),
         )
+    except PolicyConfigurationError:
+        return ExecutionResult(
+            execution_id=identifier,
+            status="infrastructure_error",
+            language=request.language if isinstance(request, ExecutionRequest) else None,
+            duration_ms=round((time.monotonic() - started) * 1000),
+            error="The sandbox security or resource policy is unavailable.",
+        )
     except (ValidationError, ValueError, TypeError):
         return ExecutionResult(
+            execution_id=identifier,
             status="rejected",
             language=request.language if isinstance(request, ExecutionRequest) else None,
             duration_ms=round((time.monotonic() - started) * 1000),
@@ -88,6 +102,7 @@ def execute(
         )
     except OSError:
         return ExecutionResult(
+            execution_id=identifier,
             status="infrastructure_error",
             language=request.language if isinstance(request, ExecutionRequest) else None,
             duration_ms=round((time.monotonic() - started) * 1000),
@@ -101,11 +116,12 @@ def execute(
             _docker_command(parsed),
             Path(temporary.name),
             parsed.timeout_seconds,
-            execution_id or str(uuid4()),
+            identifier,
         )
-        result = _result(process_result, parsed.language)
+        result = _result(process_result, parsed.language, identifier)
     except (OSError, RuntimeError, ValueError):
         result = ExecutionResult(
+            execution_id=identifier,
             status="infrastructure_error",
             language=parsed.language,
             duration_ms=round((time.monotonic() - started) * 1000),
@@ -116,6 +132,7 @@ def execute(
             temporary.cleanup()
         except OSError:
             result = ExecutionResult(
+                execution_id=identifier,
                 status="infrastructure_error",
                 language=parsed.language,
                 duration_ms=round((time.monotonic() - started) * 1000),
@@ -126,6 +143,7 @@ def execute(
 
 def main() -> int:
     """Read one JSON request from stdin and emit one JSON result to stdout."""
+    identifier = str(uuid4())
     try:
         request_bytes = sys.stdin.buffer.read(MAX_REQUEST_BYTES + 1)
         if len(request_bytes) > MAX_REQUEST_BYTES:
@@ -133,12 +151,13 @@ def main() -> int:
         request = json.loads(request_bytes)
     except ValueError:
         result = ExecutionResult(
+            execution_id=identifier,
             status="rejected",
             duration_ms=0,
             error="The execution request is invalid or exceeds the size limit.",
         )
     else:
-        result = execute(request)
+        result = execute(request, execution_id=identifier)
     sys.stdout.write(result.model_dump_json() + "\n")
     return 0
 

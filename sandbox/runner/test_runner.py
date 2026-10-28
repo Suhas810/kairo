@@ -1,5 +1,6 @@
 """Safe, predefined test commands executed in the same Docker boundary."""
 
+import json
 import re
 from pathlib import Path
 from typing import Any, Mapping
@@ -9,6 +10,7 @@ from pydantic import ValidationError
 
 from runner.environment import (
     InvalidSourceError,
+    PolicyConfigurationError,
     get_language_environment,
     prepare_workspace,
     validate_request_files,
@@ -57,6 +59,37 @@ def _test_command(request: ExecutionRequest, test_files: list[str]) -> list[str]
         "test",
         *test_files,
     ]
+
+
+def _validate_test_manifest(request: ExecutionRequest) -> None:
+    """Accept only declared package test scripts with a fixed, safe invocation."""
+    if request.language not in {"javascript", "typescript"}:
+        return
+    manifest = request.source_files.get("package.json")
+    if manifest is None:
+        return
+    try:
+        package = json.loads(manifest)
+    except (json.JSONDecodeError, UnicodeError) as exc:
+        raise InvalidSourceError("The package test configuration is invalid.") from exc
+    if not isinstance(package, dict):
+        raise InvalidSourceError("The package test configuration is invalid.")
+
+    scripts = package.get("scripts", {})
+    if not isinstance(scripts, dict):
+        raise InvalidSourceError("The package test configuration is invalid.")
+    test_script = scripts.get("test")
+    if test_script is None:
+        return
+
+    allowed_scripts = {
+        "javascript": {"node --test"},
+        "typescript": {"node /opt/kairo/typescript_runner.mjs test"},
+    }
+    if not isinstance(test_script, str) or test_script not in allowed_scripts[
+        request.language
+    ]:
+        raise InvalidSourceError("The package test script is not supported.")
 
 
 def _parse_test_summary(output: str, language: str) -> dict[str, int | None]:
@@ -111,6 +144,7 @@ def run_tests(
     container_runner=run_container,
 ) -> TestResult:
     """Run discovered tests in a disposable container with execution limits."""
+    identifier = execution_id or str(uuid4())
     try:
         parsed = (
             request
@@ -119,9 +153,11 @@ def run_tests(
         )
         validate_request_files(parsed)
         environment = get_language_environment(parsed.language)
+        _validate_test_manifest(parsed)
         tests = _test_files(parsed)
         if not tests:
             return TestResult(
+                execution_id=identifier,
                 status="rejected",
                 language=parsed.language,
                 duration_ms=0,
@@ -130,13 +166,23 @@ def run_tests(
         temporary = prepare_workspace(parsed)
     except InvalidSourceError as exc:
         return TestResult(
+            execution_id=identifier,
             status="rejected",
             language=request.language if isinstance(request, ExecutionRequest) else None,
             duration_ms=0,
             error=str(exc),
         )
+    except PolicyConfigurationError:
+        return TestResult(
+            execution_id=identifier,
+            status="infrastructure_error",
+            language=request.language if isinstance(request, ExecutionRequest) else None,
+            duration_ms=0,
+            error="The sandbox security or resource policy is unavailable.",
+        )
     except (ValidationError, ValueError, TypeError):
         return TestResult(
+            execution_id=identifier,
             status="rejected",
             language=request.language if isinstance(request, ExecutionRequest) else None,
             duration_ms=0,
@@ -144,6 +190,7 @@ def run_tests(
         )
     except OSError:
         return TestResult(
+            execution_id=identifier,
             status="infrastructure_error",
             language=request.language if isinstance(request, ExecutionRequest) else None,
             duration_ms=0,
@@ -157,9 +204,11 @@ def run_tests(
             _test_command(parsed, tests),
             Path(temporary.name),
             parsed.timeout_seconds,
-            execution_id or str(uuid4()),
+            identifier,
         )
-        execution_result: ExecutionResult = _result(process_result, parsed.language)
+        execution_result: ExecutionResult = _result(
+            process_result, parsed.language, identifier
+        )
         result = TestResult(
             **execution_result.model_dump(),
             **_parse_test_summary(
@@ -169,6 +218,7 @@ def run_tests(
         )
     except (OSError, RuntimeError, ValueError):
         result = TestResult(
+            execution_id=identifier,
             status="infrastructure_error",
             language=parsed.language,
             duration_ms=0,
@@ -178,10 +228,14 @@ def run_tests(
         try:
             temporary.cleanup()
         except OSError:
-            result = ExecutionResult(
+            result = TestResult(
+                execution_id=identifier,
                 status="infrastructure_error",
                 language=parsed.language,
                 duration_ms=result.duration_ms,
                 error="The temporary test workspace could not be cleaned up.",
+                tests_run=result.tests_run,
+                tests_passed=result.tests_passed,
+                tests_failed=result.tests_failed,
             )
     return result

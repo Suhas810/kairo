@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir --requirement requirements.txt \
     && useradd --uid 10001 --create-home --shell /usr/sbin/nologin kairo
 
 COPY --chown=kairo:kairo runner ./runner
+COPY --chown=kairo:kairo policies ./policies
 
 USER 10001:10001
 ENTRYPOINT ["python", "-m", "runner.execute"]
