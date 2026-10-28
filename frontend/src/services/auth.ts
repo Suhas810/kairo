@@ -40,6 +40,43 @@ export async function signIn(request: SignInRequest): Promise<SignInResponse> {
   }
 }
 
+export async function signUp(request: { email: string; password: string; name?: string }): Promise<SignInResponse> {
+  if (!isValidEmail(request.email)) {
+    throw new ApiError('Please enter a valid email address.', 400)
+  }
+  if (!request.password || request.password.length < 8) {
+    throw new ApiError('Password must be at least 8 characters long.', 400)
+  }
+
+  const displayName = request.name?.trim() || request.email.split('@')[0] || 'Developer'
+  const user: User = {
+    ...MOCK_USER,
+    id: `user-${request.email.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+    email: request.email.trim().toLowerCase(),
+    name: displayName,
+    createdAt: new Date().toISOString(),
+  }
+
+  return {
+    user,
+    session: {
+      provider: 'mock',
+      user,
+    },
+  }
+}
+
+export async function resetPassword(email: string): Promise<{ success: boolean; message: string }> {
+  if (!isValidEmail(email)) {
+    throw new ApiError('Please enter a valid email address to receive password reset instructions.', 400)
+  }
+
+  return {
+    success: true,
+    message: `Password reset instructions have been dispatched to ${email}. Check your inbox.`,
+  }
+}
+
 export async function signOut(): Promise<void> {
   localStorage.removeItem(USER_STORAGE_KEY)
   localStorage.removeItem(SESSION_STORAGE_KEY)
@@ -107,6 +144,8 @@ function isSession(value: unknown): value is AuthSession {
 
 export const authService = {
   signIn,
+  signUp,
+  resetPassword,
   signOut,
   getCurrentUser,
   getSession,

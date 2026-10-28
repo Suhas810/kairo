@@ -3,8 +3,17 @@ import type { Project } from '../data/mockData'
 
 export type ProjectContextValue = {
   projects: Project[]
-  createProject: (name: string, description: string) => Project
-  updateProject: (projectId: string, updates: Pick<Project, 'name' | 'description'>) => Project | null
+  createProject: (
+    name: string,
+    description: string,
+    repository?: string | null,
+    language?: string,
+    status?: Project['status'],
+  ) => Project
+  updateProject: (
+    projectId: string,
+    updates: Partial<Pick<Project, 'name' | 'description' | 'repository' | 'language' | 'status'>>,
+  ) => Project | null
   deleteProject: (projectId: string) => boolean
 }
 

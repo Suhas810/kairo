@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { getSession, signIn as signInService, signOut as signOutService, updateCurrentProfile } from '../services/auth'
+import {
+  getSession,
+  resetPassword as resetPasswordService,
+  signIn as signInService,
+  signOut as signOutService,
+  signUp as signUpService,
+  updateCurrentProfile,
+} from '../services/auth'
 import { AuthContext, type AuthContextValue, type AuthStatus } from '../contexts/AuthContext'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -54,6 +61,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus('error')
         throw caughtError instanceof Error ? caughtError : new Error(message)
       }
+    },
+    async signup(nextEmail, password, nextName) {
+      setStatus('loading')
+      setError(null)
+
+      try {
+        const response = await signUpService({ email: nextEmail, password, name: nextName })
+        localStorage.setItem('kairo-auth-session', JSON.stringify(response.session))
+        setEmail(response.user.email)
+        setName(response.user.name)
+        setStatus('authenticated')
+      } catch (caughtError) {
+        const message = caughtError instanceof Error ? caughtError.message : 'Unable to create account.'
+        setError(message)
+        setStatus('error')
+        throw caughtError instanceof Error ? caughtError : new Error(message)
+      }
+    },
+    async resetPassword(targetEmail) {
+      return resetPasswordService(targetEmail)
     },
     async updateProfile(nextName) {
       const user = await updateCurrentProfile(nextName)

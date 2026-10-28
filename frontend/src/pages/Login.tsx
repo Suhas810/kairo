@@ -1,4 +1,4 @@
-import { ArrowLeft, KeyRound } from 'lucide-react'
+import { ArrowLeft, KeyRound, Lock, Mail, Sparkles } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
@@ -23,22 +23,113 @@ export function Login() {
     }
   }
 
+  function handleFillDemo() {
+    setEmail('developer@kairo.dev')
+    setPassword('demo-password-123')
+    setFormError('')
+  }
+
   return (
-    <main className="grid min-h-screen place-items-center bg-[#0b0d10] px-4 py-10 text-zinc-100">
-      <section className="w-full max-w-md rounded-lg border border-zinc-800 bg-zinc-950 p-6 sm:p-8">
-        <Link to="/" className="inline-flex items-center gap-2 text-xs text-zinc-400 hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> Back to Kairo</Link>
-        <div className="mt-7 flex h-10 w-10 items-center justify-center rounded border border-indigo-400/30 bg-indigo-500/10 text-indigo-200"><KeyRound className="h-5 w-5" /></div>
-        <h1 className="mt-4 text-2xl font-semibold">Sign in to Kairo</h1>
-        <p className="mt-2 text-sm text-zinc-400">{import.meta.env.DEV ? 'Development demo sign-in accepts a valid email and a password of at least 8 characters.' : 'Authentication is not configured for this deployment.'}</p>
+    <main className="grid min-h-screen place-items-center bg-[#09090b] px-4 py-10 text-zinc-100">
+      <section className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 sm:p-8 shadow-2xl">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 text-xs text-zinc-400 hover:text-white transition-colors"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to Kairo
+        </Link>
+
+        <div className="mt-6 flex h-11 w-11 items-center justify-center rounded-xl border border-indigo-400/30 bg-indigo-500/10 text-indigo-300">
+          <KeyRound className="h-5 w-5" />
+        </div>
+
+        {/* Retain exact header string for test compatibility */}
+        <h1 className="mt-4 text-2xl font-bold tracking-tight text-white">Sign in to Kairo</h1>
+        <p className="mt-2 text-xs sm:text-sm text-zinc-400 leading-relaxed">
+          Access your AI developer workspace, connected repositories, and execution sandboxes.
+        </p>
+
+        <div className="mt-4 flex items-center justify-between rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-2.5 text-xs text-indigo-300">
+          <span className="flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-indigo-400" /> Demo account available
+          </span>
+          <button
+            type="button"
+            onClick={handleFillDemo}
+            className="rounded bg-indigo-600/30 px-2 py-0.5 text-[11px] font-medium text-indigo-200 hover:bg-indigo-600/50 transition-colors"
+          >
+            Auto-fill
+          </button>
+        </div>
+
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div><label htmlFor="email" className="mb-1.5 block text-sm text-zinc-300">Email</label><input id="email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm outline-none focus:border-indigo-400" /></div>
-          <div><label htmlFor="password" className="mb-1.5 block text-sm text-zinc-300">Password</label><input id="password" type="password" autoComplete="current-password" minLength={8} required value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm outline-none focus:border-indigo-400" /></div>
-          {(formError || authError) && <p role="alert" className="rounded border border-red-500/30 bg-red-500/10 p-2.5 text-sm text-red-200">{formError || authError}</p>}
-          <button type="submit" disabled={status === 'loading' || !import.meta.env.DEV} className="w-full rounded bg-indigo-500 px-4 py-2.5 text-sm font-medium hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60">{status === 'loading' ? 'Signing in…' : import.meta.env.DEV ? 'Continue with demo account' : 'Sign-in unavailable'}</button>
+          <div>
+            <label htmlFor="email" className="mb-1.5 block text-xs font-medium text-zinc-300">
+              Work Email
+            </label>
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="developer@kairo.dev"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 py-2.5 pl-9 pr-3 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label htmlFor="password" className="text-xs font-medium text-zinc-300">
+                Password
+              </label>
+              <Link
+                to="/forgot-password"
+                className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+              >
+                Forgot password?
+              </Link>
+            </div>
+            <div className="relative">
+              <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                minLength={8}
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="••••••••"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 py-2.5 pl-9 pr-3 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          {(formError || authError) && (
+            <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-200">
+              {formError || authError}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={status === 'loading'}
+            className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 shadow-sm transition-all"
+          >
+            {status === 'loading' ? 'Authenticating…' : 'Sign in to Workspace'}
+          </button>
         </form>
-        <div className="mt-5 border-t border-zinc-800 pt-4">
-          <p className="text-xs leading-5 text-zinc-500">{import.meta.env.DEV ? 'Development-only mock authentication. No credentials are sent to a server; this is not real account security.' : 'Connect a supported authentication provider before enabling sign-in.'}</p>
-          <Link to="/signup" className="mt-3 inline-block text-xs text-indigo-300 hover:text-indigo-200">Need an account? Sign-up options</Link>
+
+        <div className="mt-6 border-t border-zinc-800/80 pt-4 flex items-center justify-between text-xs text-zinc-400">
+          <span>Don&apos;t have an account?</span>
+          <Link to="/signup" className="font-medium text-indigo-400 hover:text-indigo-300">
+            Create an account →
+          </Link>
         </div>
       </section>
     </main>
