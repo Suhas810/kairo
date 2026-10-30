@@ -1,4 +1,4 @@
-import { ApiError } from './api'
+import { api, ApiError } from './api'
 import type { GitChangeEntry, RepositoryMetadata, RepositoryNode } from '../types/repository'
 
 const REPOSITORIES_STORAGE_KEY = 'kairo-workspace-repos'
@@ -77,21 +77,7 @@ const repositoryTree: RepositoryNode[] = [
             type: 'file',
             language: 'typescript',
             size: 1280,
-            content: `import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { Workspace } from './components/Workspace'
-
-export function App() {
-  return (
-    <BrowserRouter>
-      <main className="min-h-screen bg-[#09090b] text-zinc-100">
-        <Routes>
-          <Route path="/" element={<Workspace />} />
-        </Routes>
-      </main>
-    </BrowserRouter>
-  )
-}
-`,
+            content: `import { BrowserRouter, Routes, Route } from 'react-router-dom'\nimport { Workspace } from './components/Workspace'\n\nexport function App() {\n  return (\n    <BrowserRouter>\n      <main className="min-h-screen bg-[#09090b] text-zinc-100">\n        <Routes>\n          <Route path="/" element={<Workspace />} />\n        </Routes>\n      </main>\n    </BrowserRouter>\n  )\n}\n`,
           },
         ],
       },
@@ -108,20 +94,7 @@ export function App() {
             type: 'file',
             language: 'typescript',
             size: 2150,
-            content: `export interface AgentTaskRequest {
-  taskId: string
-  repository: string
-  branch: string
-  instructions: string
-}
-
-export async function dispatchAgentWorkflow(request: AgentTaskRequest) {
-  // Step 1: Analyze repository AST
-  // Step 2: Formulate candidate patches
-  // Step 3: Run isolated sandbox test verification
-  return { status: 'queued', id: request.taskId }
-}
-`,
+            content: `export interface AgentTaskRequest {\n  taskId: string\n  repository: string\n  branch: string\n  instructions: string\n}\n\nexport async function dispatchAgentWorkflow(request: AgentTaskRequest) {\n  return { status: 'queued', id: request.taskId }\n}\n`,
           },
         ],
       },
@@ -138,45 +111,9 @@ export async function dispatchAgentWorkflow(request: AgentTaskRequest) {
             type: 'file',
             language: 'typescript',
             size: 640,
-            content: `export function formatDate(value: Date | string): string {
-  const date = typeof value === 'string' ? new Date(value) : value
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-`,
+            content: `export function formatDate(value: Date | string): string {\n  const date = typeof value === 'string' ? new Date(value) : value\n  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })\n}\n`,
           },
         ],
-      },
-    ],
-  },
-  {
-    id: 'docs',
-    name: 'docs',
-    path: 'docs',
-    type: 'directory',
-    children: [
-      {
-        id: 'docs/architecture.md',
-        name: 'architecture.md',
-        path: 'docs/architecture.md',
-        type: 'file',
-        language: 'markdown',
-        size: 1540,
-        content: `# Kairo Architecture Overview
-
-Kairo coordinates an intelligent developer loop:
-1. **Repository Context Ingestion**: AST extraction and symbol indexing.
-2. **Agent Planning**: Structured breakdown of tasks into deterministic steps.
-3. **Isolated Sandbox**: Dockerized ephemeral test runners.
-4. **Interactive Review**: Unified git diffs with test evidence.
-`,
       },
     ],
   },
@@ -187,17 +124,7 @@ Kairo coordinates an intelligent developer loop:
     type: 'file',
     language: 'json',
     size: 780,
-    content: `{
-  "name": "kairo-demo",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "test": "vitest run"
-  }
-}
-`,
+    content: `{\n  "name": "kairo-demo",\n  "version": "1.0.0",\n  "private": true\n}\n`,
   },
 ]
 
@@ -205,10 +132,20 @@ const gitChanges: GitChangeEntry[] = [
   { path: 'src/services/orchestrator.ts', status: 'modified', detail: 'Added candidate patch synthesis pipeline', additions: 32, deletions: 6 },
   { path: 'src/utils/format.ts', status: 'added', detail: 'Added byte and timestamp formatting utilities', additions: 18, deletions: 0 },
   { path: 'docs/architecture.md', status: 'modified', detail: 'Documented sandbox boundary constraints', additions: 14, deletions: 2 },
-  { path: 'docs/legacy-readme.md', status: 'deleted', detail: 'Cleaned up deprecated setup guide', additions: 0, deletions: 24 },
 ]
 
-export async function listRepositories(): Promise<RepositoryMetadata[]> {
+export async function listRepositories(projectId?: string): Promise<RepositoryMetadata[]> {
+  try {
+    const res = await api.get<RepositoryMetadata[]>('/repositories', {
+      params: { project_id: projectId || '061f6320-e711-4074-9689-b762b63cf4f4' },
+    })
+    if (Array.isArray(res) && res.length > 0) {
+      writeStoredRepos(res)
+      return res
+    }
+  } catch {
+    // Fallback
+  }
   return readStoredRepos()
 }
 
@@ -220,6 +157,7 @@ export async function getRepositoryMetadata(): Promise<RepositoryMetadata> {
 export async function connectRepository(input: {
   name: string
   url: string
+  projectId?: string
   provider?: string
   branch?: string
   description?: string
@@ -246,26 +184,77 @@ export async function connectRepository(input: {
     updatedAt: new Date().toISOString(),
   }
 
+  try {
+    const [owner, repoName] = fullName.split('/')
+    if (owner && repoName && input.projectId) {
+      const res = await api.post<RepositoryMetadata>('/repositories', {
+        project_id: input.projectId,
+        owner,
+        repository: repoName,
+        provider: input.provider || 'github',
+        default_branch: input.branch || 'main',
+      })
+      if (res) {
+        return res
+      }
+    }
+  } catch {
+    // Fallback to local store
+  }
+
   const stored = readStoredRepos()
   const next = [newRepo, ...stored]
   writeStoredRepos(next)
   return newRepo
 }
 
-export async function disconnectRepository(repoId: string): Promise<boolean> {
+export async function disconnectRepository(repoId: string, projectId?: string, fullName?: string): Promise<boolean> {
+  if (projectId && fullName && fullName.includes('/')) {
+    const [owner, repository] = fullName.split('/')
+    try {
+      await api.del(`/repositories/${owner}/${repository}`, {
+        params: { project_id: projectId },
+      })
+    } catch {
+      // Fallback
+    }
+  }
   const stored = readStoredRepos()
   const next = stored.filter((r) => r.id !== repoId)
   writeStoredRepos(next)
   return true
 }
 
-export async function getRepositoryFileTree(): Promise<RepositoryNode[]> {
+export async function getRepositoryFileTree(projectId?: string, fullName?: string, branch?: string): Promise<RepositoryNode[]> {
+  if (projectId && fullName && fullName.includes('/')) {
+    const [owner, repository] = fullName.split('/')
+    try {
+      const res = await api.get<RepositoryNode[]>(`/repositories/${owner}/${repository}/tree`, {
+        params: { project_id: projectId, branch: branch || 'main' },
+      })
+      if (Array.isArray(res) && res.length > 0) return res
+    } catch {
+      // Fallback
+    }
+  }
   return repositoryTree
 }
 
-export async function getRepositoryFileContent(path: string): Promise<string> {
+export async function getRepositoryFileContent(path: string, projectId?: string, fullName?: string, branch?: string): Promise<string> {
   if (!path || path.trim().length === 0) {
     throw new ApiError('Repository path is required.', 400)
+  }
+
+  if (projectId && fullName && fullName.includes('/')) {
+    const [owner, repository] = fullName.split('/')
+    try {
+      const res = await api.get<{ content: string }>(`/repositories/${owner}/${repository}/content`, {
+        params: { path, project_id: projectId, branch: branch || 'main' },
+      })
+      if (res && typeof res.content === 'string') return res.content
+    } catch {
+      // Fallback
+    }
   }
 
   function findFile(nodes: RepositoryNode[], target: string): RepositoryNode | undefined {
@@ -287,7 +276,18 @@ export async function getRepositoryFileContent(path: string): Promise<string> {
   return file.content ?? ''
 }
 
-export async function getRepositoryChanges(): Promise<GitChangeEntry[]> {
+export async function getRepositoryChanges(projectId?: string, fullName?: string): Promise<GitChangeEntry[]> {
+  if (projectId && fullName && fullName.includes('/')) {
+    const [owner, repository] = fullName.split('/')
+    try {
+      const res = await api.get<GitChangeEntry[]>(`/repositories/${owner}/${repository}/changes`, {
+        params: { project_id: projectId },
+      })
+      if (Array.isArray(res) && res.length > 0) return res
+    } catch {
+      // Fallback
+    }
+  }
   return gitChanges
 }
 

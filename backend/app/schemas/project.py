@@ -1,6 +1,7 @@
 """Project API schemas."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -36,6 +37,7 @@ class ProjectUpdate(BaseModel):
     repository_url: str | None = Field(default=None, max_length=2048)
     default_branch: str | None = Field(default=None, max_length=255)
     language: str | None = Field(default=None, max_length=100)
+    status: str | None = Field(default=None, max_length=50)
 
     @field_validator("name")
     @classmethod
@@ -68,5 +70,7 @@ class ProjectResponse(BaseModel):
     repository_url: str | None = None
     default_branch: str | None = None
     language: str | None = None
+    status: str = "active"
+    configuration: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime | None = None
     updated_at: datetime | None = None

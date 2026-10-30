@@ -16,6 +16,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useProject } from '../hooks/useProject'
 import { useTask } from '../hooks/useTask'
 import { useToast } from '../hooks/useToast'
+import { agentService } from '../services/agent'
 import { ToolCall, type ToolStatus } from '../components/agent/ToolCall'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -71,8 +72,8 @@ export function Agent() {
   // Configuration state
   const [selectedTaskId, setSelectedTaskId] = useState<string>('')
   const [customPrompt, setCustomPrompt] = useState<string | null>(null)
-  const [modelId, setModelId] = useState('Qwen/Qwen2.5-7B-Instruct')
-  const [provider, setProvider] = useState('Hugging Face / Nebius AI')
+  const [modelId, setModelId] = useState('nvidia/nemotron-3-super-120b-a12b')
+  const [provider, setProvider] = useState('Nebius Token Factory')
   const [temperature, setTemperature] = useState(0.2)
   const [sandboxVerify, setSandboxVerify] = useState(true)
   const [showConfig, setShowConfig] = useState(false)
@@ -117,6 +118,16 @@ export function Agent() {
     setCurrentStage('planning')
     setDiffContent(null)
     setEvents([])
+
+    if (project?.id) {
+      void agentService
+        .submitAgentTask({
+          projectId: project.id,
+          title: projectTasks.find((t) => t.id === currentTaskId)?.title || 'Autonomous Task',
+          description: effectivePrompt,
+        })
+        .catch(() => {})
+    }
 
     // Scripted stages for high-fidelity workflow inspection
     const steps: Array<{
@@ -217,6 +228,9 @@ export function Agent() {
 
   function handleCancel() {
     setStatus('cancelled')
+    if (project?.id && currentTaskId && currentTaskId !== 'custom') {
+      void agentService.cancelTask(currentTaskId).catch(() => {})
+    }
     toast.info('Agent workflow execution cancelled.')
   }
 
@@ -357,6 +371,7 @@ export function Agent() {
                 onChange={(e) => setProvider(e.target.value)}
                 className="w-full rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-zinc-200 text-xs outline-none focus:border-indigo-500"
               >
+                <option value="Nebius Token Factory">Nebius Token Factory (NVIDIA Nemotron)</option>
                 <option value="Hugging Face / Nebius AI">Hugging Face / Nebius AI</option>
                 <option value="Local Ollama / vLLM">Local Ollama / vLLM Endpoint</option>
                 <option value="Custom Inference Gateway">Custom Inference Gateway</option>

@@ -1,4 +1,4 @@
-import { ApiError } from './api'
+import { api, ApiError } from './api'
 import type { Task, TaskCreateInput, TaskUpdateInput } from '../types/task'
 
 const TASKS_STORAGE_KEY = 'kairo-workspace-tasks'
@@ -72,6 +72,19 @@ function writeStoredTasks(tasks: Task[]): void {
 let tasksCache: Task[] = readStoredTasks()
 
 export async function listTasks(projectId?: string): Promise<Task[]> {
+  try {
+    const remote = await api.get<Task[]>('/tasks', {
+      params: projectId ? { project_id: projectId } : undefined,
+    })
+    if (Array.isArray(remote) && remote.length > 0) {
+      tasksCache = remote
+      writeStoredTasks(remote)
+      return remote
+    }
+  } catch {
+    // Fallback to storage cache
+  }
+
   tasksCache = readStoredTasks()
   if (projectId) {
     return tasksCache.filter((task) => task.projectId === projectId)
@@ -80,6 +93,13 @@ export async function listTasks(projectId?: string): Promise<Task[]> {
 }
 
 export async function getTaskById(taskId: string): Promise<Task | null> {
+  try {
+    const remote = await api.get<Task>(`/tasks/${taskId}`)
+    if (remote) return remote
+  } catch {
+    // Fallback
+  }
+
   tasksCache = readStoredTasks()
   return tasksCache.find((task) => task.id === taskId) ?? null
 }
@@ -105,12 +125,46 @@ export async function createTask(input: TaskCreateInput): Promise<Task> {
     updatedAt: now,
   }
 
+  try {
+    const remote = await api.post<Task>('/tasks', {
+      project_id: input.projectId,
+      title: input.title.trim(),
+      description: input.description?.trim(),
+      priority: input.priority || 'normal',
+      task_type: input.taskType || 'feature',
+    })
+    if (remote && remote.id) {
+      tasksCache = [remote, ...readStoredTasks()]
+      writeStoredTasks(tasksCache)
+      return remote
+    }
+  } catch {
+    // Fallback to local storage
+  }
+
   tasksCache = [newTask, ...readStoredTasks()]
   writeStoredTasks(tasksCache)
   return newTask
 }
 
 export async function updateTask(taskId: string, updates: TaskUpdateInput): Promise<Task> {
+  try {
+    const remote = await api.patch<Task>(`/tasks/${taskId}`, {
+      title: updates.title,
+      description: updates.description,
+      status: updates.status,
+      priority: updates.priority,
+      task_type: updates.taskType,
+    })
+    if (remote) {
+      tasksCache = readStoredTasks().map((t) => (t.id === taskId ? remote : t))
+      writeStoredTasks(tasksCache)
+      return remote
+    }
+  } catch {
+    // Fallback
+  }
+
   tasksCache = readStoredTasks()
   const index = tasksCache.findIndex((t) => t.id === taskId)
   if (index === -1) {
@@ -135,6 +189,12 @@ export async function updateTask(taskId: string, updates: TaskUpdateInput): Prom
 }
 
 export async function deleteTask(taskId: string): Promise<boolean> {
+  try {
+    await api.del(`/tasks/${taskId}`)
+  } catch {
+    // Fallback
+  }
+
   tasksCache = readStoredTasks()
   const filtered = tasksCache.filter((t) => t.id !== taskId)
   if (filtered.length === tasksCache.length) {

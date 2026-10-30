@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useTheme } from '../hooks/useTheme'
 import type { ThemePreference } from '../contexts/ThemeContext'
 import { useWebSocket } from '../hooks/useWebSocket'
+import { settingsService } from '../services/settings'
 
 const sections = [
   { id: 'profile', label: 'Profile', icon: UserRound },
@@ -61,6 +62,14 @@ export function Settings() {
     document.documentElement.dataset.contrast = preferences.highContrast ? 'high' : 'normal'
   }, [preferences.compact, preferences.highContrast])
 
+  useEffect(() => {
+    void settingsService.getUserSettings().then((remote) => {
+      if (remote?.theme && (remote.theme === 'light' || remote.theme === 'dark' || remote.theme === 'system')) {
+        setPreference(remote.theme as ThemePreference)
+      }
+    })
+  }, [setPreference])
+
   function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
@@ -82,6 +91,7 @@ export function Settings() {
     setMessage('')
     try {
       setPreference(nextTheme)
+      void settingsService.updateUserSettings({ theme: nextTheme }).catch(() => {})
       setMessage(nextTheme === 'system' ? 'Theme preference saved. Appearance now follows your system setting.' : `Theme updated to ${nextTheme}.`)
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Unable to save the theme preference.')

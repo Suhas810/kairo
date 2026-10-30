@@ -1,4 +1,4 @@
-import { ApiError } from './api'
+import { api, ApiError } from './api'
 import type { Project, ProjectCreateInput, ProjectUpdateInput } from '../types/project'
 import { isValidProjectName } from '../utils/validation'
 
@@ -28,6 +28,18 @@ const initialProjects: Project[] = [
 let projectStore: Project[] = [...initialProjects]
 
 export async function listProjects(): Promise<Project[]> {
+  try {
+    const res = await api.get<{ projects: Project[] } | Project[]>('/projects')
+    if (res) {
+      const items = Array.isArray(res) ? res : res.projects || []
+      if (items.length > 0) {
+        projectStore = items
+        return items
+      }
+    }
+  } catch {
+    // Graceful fallback to local store in demo or unauthenticated mode
+  }
   return projectStore
 }
 
@@ -36,12 +48,36 @@ export async function getProjectById(projectId: string): Promise<Project | null>
     throw new ApiError('Project id is required.', 400)
   }
 
+  try {
+    const res = await api.get<Project>(`/projects/${projectId}`)
+    if (res) {
+      return res
+    }
+  } catch {
+    // Fallback
+  }
+
   return projectStore.find((project) => project.id === projectId) ?? null
 }
 
 export async function createProject(input: ProjectCreateInput): Promise<Project> {
   if (!isValidProjectName(input.name)) {
     throw new ApiError('Project names must be between 2 and 80 characters.', 400)
+  }
+
+  try {
+    const created = await api.post<Project>('/projects', {
+      name: input.name.trim(),
+      description: input.description?.trim() || 'No description provided.',
+      repository_url: input.repository ? `https://github.com/${input.repository}` : null,
+      language: input.language?.trim() || 'TypeScript',
+    })
+    if (created && created.id) {
+      projectStore = [created, ...projectStore]
+      return created
+    }
+  } catch {
+    // Fallback to local store
   }
 
   const createdAt = new Date().toISOString()
@@ -61,6 +97,16 @@ export async function createProject(input: ProjectCreateInput): Promise<Project>
 }
 
 export async function updateProject(projectId: string, updates: ProjectUpdateInput): Promise<Project> {
+  try {
+    const updated = await api.patch<Project>(`/projects/${projectId}`, updates)
+    if (updated) {
+      projectStore = projectStore.map((item) => (item.id === projectId ? updated : item))
+      return updated
+    }
+  } catch {
+    // Fallback
+  }
+
   const project = projectStore.find((item) => item.id === projectId)
   if (!project) {
     throw new ApiError('Project not found.', 404)
@@ -84,6 +130,12 @@ export async function updateProject(projectId: string, updates: ProjectUpdateInp
 export async function deleteProject(projectId: string, confirmed = false): Promise<boolean> {
   if (!confirmed) {
     throw new ApiError('Delete actions require an explicit confirmation.', 409)
+  }
+
+  try {
+    await api.del(`/projects/${projectId}`)
+  } catch {
+    // Continue with store deletion
   }
 
   const next = projectStore.filter((project) => project.id !== projectId)

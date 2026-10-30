@@ -1,4 +1,4 @@
-import { ApiError } from './api'
+import { api, ApiError } from './api'
 import type { Execution, ExecutionRequest, ExecutionResponse, ExecutionStatus, TestCaseResult } from '../types/execution'
 
 const initialExecutions: Execution[] = [
@@ -67,6 +67,18 @@ const initialTestResults: TestCaseResult[] = [
 ]
 
 export async function listExecutions(projectId?: string): Promise<Execution[]> {
+  try {
+    const remote = await api.get<Execution[]>('/executions', {
+      params: projectId ? { project_id: projectId } : undefined,
+    })
+    if (Array.isArray(remote) && remote.length > 0) {
+      remote.forEach((e) => executionStore.set(e.id, e))
+      return remote
+    }
+  } catch {
+    // Fallback
+  }
+
   const all = Array.from(executionStore.values())
   if (projectId) {
     return all.filter((e) => e.projectId === projectId)
@@ -77,6 +89,19 @@ export async function listExecutions(projectId?: string): Promise<Execution[]> {
 export async function startExecution(request: ExecutionRequest): Promise<ExecutionResponse> {
   if (!request.projectId || !request.title.trim()) {
     throw new ApiError('Project id and execution title are required.', 400)
+  }
+
+  try {
+    const remote = await api.post<ExecutionResponse>('/executions', {
+      project_id: request.projectId,
+      title: request.title.trim(),
+    })
+    if (remote && remote.execution) {
+      executionStore.set(remote.execution.id, remote.execution)
+      return remote
+    }
+  } catch {
+    // Fallback
   }
 
   const startedAt = new Date().toISOString()
@@ -100,10 +125,23 @@ export async function startExecution(request: ExecutionRequest): Promise<Executi
 }
 
 export async function getExecutionById(executionId: string): Promise<Execution | null> {
+  try {
+    const remote = await api.get<Execution>(`/executions/${executionId}`)
+    if (remote) return remote
+  } catch {
+    // Fallback
+  }
   return executionStore.get(executionId) ?? null
 }
 
 export async function getExecutionStatus(executionId: string): Promise<{ status: ExecutionStatus; progress: number }> {
+  try {
+    const remote = await api.get<{ status: ExecutionStatus; progress: number }>(`/executions/${executionId}/status`)
+    if (remote) return remote
+  } catch {
+    // Fallback
+  }
+
   const execution = executionStore.get(executionId)
   if (!execution) {
     throw new ApiError('Execution not found.', 404)
@@ -116,6 +154,13 @@ export async function getExecutionStatus(executionId: string): Promise<{ status:
 }
 
 export async function getExecutionLogs(executionId: string): Promise<Execution['logs']> {
+  try {
+    const remote = await api.get<Execution['logs']>(`/executions/${executionId}/logs`)
+    if (Array.isArray(remote)) return remote
+  } catch {
+    // Fallback
+  }
+
   const execution = executionStore.get(executionId)
   if (!execution) {
     throw new ApiError('Execution not found.', 404)
@@ -125,6 +170,13 @@ export async function getExecutionLogs(executionId: string): Promise<Execution['
 }
 
 export async function getExecutionTestResults(executionId: string): Promise<Execution['testResults']> {
+  try {
+    const remote = await api.get<Execution['testResults']>(`/executions/${executionId}/test-results`)
+    if (Array.isArray(remote)) return remote
+  } catch {
+    // Fallback
+  }
+
   const execution = executionStore.get(executionId)
   if (!execution) {
     throw new ApiError('Execution not found.', 404)
@@ -134,6 +186,16 @@ export async function getExecutionTestResults(executionId: string): Promise<Exec
 }
 
 export async function cancelExecution(executionId: string): Promise<Execution> {
+  try {
+    const remote = await api.post<Execution>(`/executions/${executionId}/cancel`)
+    if (remote) {
+      executionStore.set(executionId, remote)
+      return remote
+    }
+  } catch {
+    // Fallback
+  }
+
   const execution = executionStore.get(executionId)
   if (!execution) {
     throw new ApiError('Execution not found.', 404)

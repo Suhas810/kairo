@@ -15,8 +15,35 @@ export function AuthCallback() {
   useEffect(() => {
     if (error) return
 
-    // In a real OAuth flow or Supabase redirect, the hash or query contains tokens.
-    // If user is already authenticated or restores session, redirect to /dashboard
+    if (window.location.hash) {
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const accessToken = hashParams.get('access_token')
+      if (accessToken) {
+        try {
+          const parts = accessToken.split('.')
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1]))
+            const user = {
+              id: payload.sub || `user-${Date.now()}`,
+              email: payload.email || 'user@supabase.local',
+              name: payload.user_metadata?.display_name || payload.email?.split('@')[0] || 'Operator',
+              role: 'Engineer',
+              createdAt: new Date().toISOString(),
+            }
+            const session = {
+              provider: 'supabase',
+              user,
+              accessToken,
+            }
+            localStorage.setItem('kairo-auth-session', JSON.stringify(session))
+            localStorage.setItem('kairo-auth-user', JSON.stringify(user))
+          }
+        } catch {
+          // ignore parse error
+        }
+      }
+    }
+
     const timer = setTimeout(() => {
       navigate('/dashboard', { replace: true })
     }, 1200)

@@ -1,4 +1,4 @@
-import { ApiError } from './api'
+import { api, ApiError } from './api'
 import type { AgentActivityEvent, AgentTask, AgentTaskResponse, AgentTaskStatus, AgentTaskSubmissionInput } from '../types/agent'
 
 const mockActivity: AgentActivityEvent[] = [
@@ -40,6 +40,34 @@ export async function submitAgentTask(input: AgentTaskSubmissionInput): Promise<
     throw new ApiError('A project id and task title are required.', 400)
   }
 
+  try {
+    const taskText = input.description.trim() ? `${input.title.trim()}: ${input.description.trim()}` : input.title.trim()
+    const remote = await api.post<any>('/agents/tasks', {
+      project_id: input.projectId,
+      task: taskText,
+    })
+    if (remote && remote.task_id) {
+      const liveTask: AgentTask = {
+        id: String(remote.task_id),
+        projectId: input.projectId,
+        title: input.title.trim(),
+        description: input.description.trim() || 'Dispatched task',
+        status: 'queued',
+        progress: 10,
+        createdAt: remote.created_at || new Date().toISOString(),
+        updatedAt: remote.created_at || new Date().toISOString(),
+        activity: remote.activity || [],
+      }
+      taskStore = [liveTask, ...taskStore]
+      return {
+        task: liveTask,
+        simulated: false,
+      }
+    }
+  } catch {
+    // Fallback in demo or unconfigured mode
+  }
+
   const createdAt = new Date().toISOString()
   const task: AgentTask = {
     id: `task-${Math.random().toString(36).slice(2, 10)}`,
@@ -70,11 +98,38 @@ export async function submitAgentTask(input: AgentTaskSubmissionInput): Promise<
 }
 
 export async function getTaskById(taskId: string): Promise<AgentTask | null> {
+  try {
+    const remote = await api.get<any>(`/agents/tasks/${taskId}`)
+    if (remote) {
+      return {
+        id: String(remote.task_id || remote.id),
+        projectId: remote.project_id,
+        title: remote.result_summary || 'Agent Task',
+        description: remote.result_summary || '',
+        status: remote.status || 'queued',
+        progress: remote.progress || 0,
+        createdAt: remote.created_at || new Date().toISOString(),
+        updatedAt: remote.completed_at || new Date().toISOString(),
+        activity: remote.activity || [],
+        result: remote.result_summary,
+      }
+    }
+  } catch {
+    // Fallback
+  }
+
   const task = taskStore.find((item) => item.id === taskId)
   return task ?? null
 }
 
 export async function getTaskStatus(taskId: string): Promise<{ status: AgentTaskStatus; progress: number }> {
+  try {
+    const remote = await api.get<{ status: AgentTaskStatus; progress: number }>(`/agents/tasks/${taskId}/status`)
+    if (remote) return remote
+  } catch {
+    // Fallback
+  }
+
   const task = await getTaskById(taskId)
   if (!task) {
     throw new ApiError('Task not found.', 404)
@@ -87,6 +142,13 @@ export async function getTaskStatus(taskId: string): Promise<{ status: AgentTask
 }
 
 export async function getTaskActivity(taskId: string): Promise<AgentActivityEvent[]> {
+  try {
+    const remote = await api.get<AgentActivityEvent[]>(`/agents/tasks/${taskId}/activity`)
+    if (Array.isArray(remote) && remote.length > 0) return remote
+  } catch {
+    // Fallback
+  }
+
   const task = await getTaskById(taskId)
   if (!task) {
     throw new ApiError('Task not found.', 404)
@@ -96,6 +158,12 @@ export async function getTaskActivity(taskId: string): Promise<AgentActivityEven
 }
 
 export async function cancelTask(taskId: string): Promise<AgentTask> {
+  try {
+    await api.post(`/agents/tasks/${taskId}/cancel`)
+  } catch {
+    // Fallback
+  }
+
   const task = await getTaskById(taskId)
   if (!task) {
     throw new ApiError('Task not found.', 404)
@@ -112,7 +180,7 @@ export async function cancelTask(taskId: string): Promise<AgentTask> {
         id: `event-${Math.random().toString(36).slice(2, 8)}`,
         type: 'error',
         stage: 'failed',
-        message: 'The task was cancelled by the user during the simulated run.',
+        message: 'The task was cancelled by the user.',
         timestamp: new Date().toISOString(),
       },
     ],

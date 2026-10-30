@@ -39,6 +39,21 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     requestHeaders.set('Content-Type', 'application/json')
   }
 
+  if (!requestHeaders.has('Authorization')) {
+    try {
+      const stored = localStorage.getItem('kairo-auth-session')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        const token = parsed?.access_token || parsed?.session?.access_token || parsed?.token
+        if (token) {
+          requestHeaders.set('Authorization', `Bearer ${token}`)
+        }
+      }
+    } catch {
+      // Ignore json parse error
+    }
+  }
+
   try {
     const response = await fetch(buildUrl(path, params), {
       ...requestInit,
@@ -55,11 +70,20 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     const payload = rawText && contentType.includes('application/json') ? JSON.parse(rawText) : rawText || undefined
 
     if (!response.ok) {
-      throw new ApiError(
-        response.statusText || 'The request could not be completed.',
-        response.status,
-        payload,
-      )
+      let message = response.statusText || 'The request could not be completed.'
+      if (payload && typeof payload === 'object') {
+        const p = payload as Record<string, any>
+        if (typeof p.error === 'string') {
+          message = p.error
+        } else if (p.error && typeof p.error === 'object' && typeof p.error.message === 'string') {
+          message = p.error.message
+        } else if (typeof p.message === 'string') {
+          message = p.message
+        } else if (typeof p.detail === 'string') {
+          message = p.detail
+        }
+      }
+      throw new ApiError(message, response.status, payload)
     }
 
     return payload as T
